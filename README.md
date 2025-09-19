@@ -12,13 +12,15 @@ Dự án này bao gồm:
 
 ## 📂 Cấu trúc thư mục
 📦 8quanhau
+┣ output
 
-┣ 📜 8QuanHau.ipynb # Notebook giải bài toán 8 quân hậu
+┃ ┗ 📜 8queens_duongdi.txt # File chứa đường đi lời giải
+
+┣ 📜 8QuanHau.oy # File chính giải bài toán 8 quân hậu
 
 ┣ 📜 PEAS - 8QueenAndCaro.docx # Tài liệu mô tả PEAS
 
 ┗ 📜 README.md # Tài liệu mô tả repo
-
 ---
 
 ## 🚀 Cách chạy
