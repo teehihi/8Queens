@@ -41,13 +41,13 @@ def dfs_8queens_steps():
                 yield vitri + [col]
 
 def cost_function(state, row, col, n=8):
+    # số cặp tấn công khi thêm hậu ở (row, col)
     attacks = 0
     for r, c in enumerate(state):
-        if c == col:
+        if c == col or abs(c - col) == abs(r - row):
             attacks += 1
-        if abs(c - col) == abs(r - row):
-            attacks += 1
-    return attacks if attacks > 0 else 1
+    # chi phí cơ bản = 1, cộng thêm phạt nặng nếu có xung đột
+    return 1 + attacks * 5
 
 def ucs_8queens_steps():
     n = 8
@@ -60,10 +60,9 @@ def ucs_8queens_steps():
             yield vitri
             return
         for col in range(n):
-            if isSafe(vitri, row, col):
-                new_cost = cost + cost_function(vitri, row, col, n)
-                pq.put((new_cost, vitri + [col]))
-                yield vitri + [col]
+            new_cost = cost + cost_function(vitri, row, col, n)
+            pq.put((new_cost, vitri + [col]))
+            yield vitri + [col]
 
 # --- Depth Limited Search (DLS)---
 last_dls_result = None
@@ -115,6 +114,75 @@ def ids_8queens_steps(limit_max=8):
             return
     last_dls_result = "failure"
     return
+
+# --- Hàm heuristic: số cặp hậu tấn công nhau ---
+def heuristic(state):
+    attacks = 0
+    n = len(state)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if state[i] == state[j] or abs(state[i] - state[j]) == abs(i - j):
+                attacks += 1
+    return attacks
+
+# --- Thuật toán Greedy ---
+def greedy_8queens_steps():
+    n = 8
+    # Khởi tạo random 1 state (mỗi hàng 1 hậu)
+    import random
+    state = [random.randint(0, n-1) for _ in range(n)]
+    yield state
+
+    while True:
+        h_now = heuristic(state)
+        if h_now == 0:  # nghiệm
+            return
+
+        best_state = None
+
+        best_h = h_now
+
+        # Thử di chuyển từng hậu sang cột khác để giảm h
+        for row in range(n):
+            original_col = state[row]
+            for col in range(n):
+                if col == original_col: 
+                    continue
+                new_state = state.copy()
+                new_state[row] = col
+                h_new = heuristic(new_state)
+                if h_new < best_h:
+                    best_h = h_new
+                    best_state = new_state
+
+        if best_state is None:
+            # Không giảm được nữa => local minima
+            return
+        else:
+            state = best_state
+            yield state
+
+# --- A* Search ---
+def astar_8queens_steps():
+    n = 8
+    pq = PriorityQueue()
+    pq.put((0, 0, []))  # (f, g, state)
+
+    while not pq.empty():
+        f, g, state = pq.get()
+        row = len(state)
+        if row == n:
+            yield state
+            return
+        for col in range(n):
+            new_state = state + [col]
+            g_new = g + 1
+            # heuristic = số hậu chưa đặt + số cặp xung đột * hệ số
+            h_new = (n - len(new_state)) + heuristic(new_state) * 10
+            f_new = g_new + h_new
+            pq.put((f_new, g_new, new_state))
+            yield new_state
+
 
 # --- GUI ---
 root = tk.Tk()
@@ -235,12 +303,19 @@ def start_search():
             if limit < 0: limit = 8
         except Exception: limit = 8
         search_generator = ids_8queens_steps(limit_max=limit)
+
+    elif choice == "Greedy":
+        search_generator = greedy_8queens_steps()
+    elif choice == "A*":
+        search_generator = astar_8queens_steps()
+
     else:
         try:
             limit = int(dls_limit_var.get())
             if limit < 0: limit = 8
         except Exception: limit = 8
         search_generator = dls_8queens_steps(limit=limit)
+    
     running = True
     run_step()
 
@@ -297,6 +372,10 @@ tk.Radiobutton(control_label, text="DLS", variable=algo_choice,
                value="DLS", bg="#BDE7E7").pack(side="left", padx=5)
 tk.Radiobutton(control_label, text="IDS", variable=algo_choice,
                value="IDS", bg="#BDE7E7").pack(side="left", padx=5)
+tk.Radiobutton(control_label, text="Greedy", variable=algo_choice,
+               value="Greedy", bg="#BDE7E7").pack(side="left", padx=5)
+tk.Radiobutton(control_label, text="A*", variable=algo_choice,
+               value="A*", bg="#BDE7E7").pack(side="left", padx=5)
 
 dls_limit_var = tk.StringVar(value="8")
 dls_limit_frame = tk.Frame(root, bg="#BDE7E7")
