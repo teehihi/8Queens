@@ -2,15 +2,25 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 from queue import Queue, PriorityQueue
+import random, math
 
-# --- Hàm kiểm tra an toàn có thể chèn hậu ---
+# ------------------ Utility ------------------
 def isSafe(vitri, row, col):
     for r, c in enumerate(vitri):
         if c == col or abs(c - col) == abs(r - row):
             return False
     return True
 
-# --- Thuật toán tìm kiếm ---
+def heuristic(state):
+    attacks = 0
+    n = len(state)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if state[i] == state[j] or abs(state[i] - state[j]) == abs(i - j):
+                attacks += 1
+    return attacks
+
+# ------------------ Generators for algorithms ------------------
 def bfs_8queens_steps():
     n = 8
     q = Queue()
@@ -41,12 +51,10 @@ def dfs_8queens_steps():
                 yield vitri + [col]
 
 def cost_function(state, row, col, n=8):
-    # số cặp tấn công khi thêm hậu ở (row, col)
     attacks = 0
     for r, c in enumerate(state):
         if c == col or abs(c - col) == abs(r - row):
             attacks += 1
-    # chi phí cơ bản = 1, cộng thêm phạt nặng nếu có xung đột
     return 1 + attacks * 5
 
 def ucs_8queens_steps():
@@ -60,13 +68,13 @@ def ucs_8queens_steps():
             yield vitri
             return
         for col in range(n):
-            new_cost = cost + cost_function(vitri, row, col, n)
-            pq.put((new_cost, vitri + [col]))
-            yield vitri + [col]
+            if isSafe(vitri, row, col):
+                new_cost = cost + cost_function(vitri, row, col, n)
+                pq.put((new_cost, vitri + [col]))
+                yield vitri + [col]
 
-# --- Depth Limited Search (DLS)---
+# DLS / IDS (with last_dls_result)
 last_dls_result = None
-
 def dls_8queens_steps(limit=8):
     global last_dls_result
     n = 8
@@ -98,7 +106,6 @@ def dls_8queens_steps(limit=8):
     last_dls_result = res
     return
 
-# --- Iterative Deepening Search ---
 def ids_8queens_steps(limit_max=8):
     global last_dls_result
     for depth in range(0, limit_max + 1):
@@ -115,38 +122,20 @@ def ids_8queens_steps(limit_max=8):
     last_dls_result = "failure"
     return
 
-# --- Hàm heuristic: số cặp hậu tấn công nhau ---
-def heuristic(state):
-    attacks = 0
-    n = len(state)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if state[i] == state[j] or abs(state[i] - state[j]) == abs(i - j):
-                attacks += 1
-    return attacks
-
-# --- Thuật toán Greedy ---
 def greedy_8queens_steps():
     n = 8
-    # Khởi tạo random 1 state (mỗi hàng 1 hậu)
-    import random
     state = [random.randint(0, n-1) for _ in range(n)]
     yield state
-
     while True:
         h_now = heuristic(state)
-        if h_now == 0:  # nghiệm
+        if h_now == 0:
             return
-
         best_state = None
-
         best_h = h_now
-
-        # Thử di chuyển từng hậu sang cột khác để giảm h
         for row in range(n):
             original_col = state[row]
             for col in range(n):
-                if col == original_col: 
+                if col == original_col:
                     continue
                 new_state = state.copy()
                 new_state[row] = col
@@ -154,20 +143,16 @@ def greedy_8queens_steps():
                 if h_new < best_h:
                     best_h = h_new
                     best_state = new_state
-
         if best_state is None:
-            # Không giảm được nữa => local minima
             return
         else:
             state = best_state
             yield state
 
-# --- A* Search ---
 def astar_8queens_steps():
     n = 8
     pq = PriorityQueue()
     pq.put((0, 0, []))  # (f, g, state)
-
     while not pq.empty():
         f, g, state = pq.get()
         row = len(state)
@@ -177,37 +162,159 @@ def astar_8queens_steps():
         for col in range(n):
             new_state = state + [col]
             g_new = g + 1
-            # heuristic = số hậu chưa đặt + số cặp xung đột * hệ số
             h_new = (n - len(new_state)) + heuristic(new_state) * 10
             f_new = g_new + h_new
             pq.put((f_new, g_new, new_state))
             yield new_state
 
+# --- NEW ALGORITHMS: Hill, Genetic, Beam, SA ---
+def hill_climbing_steps(max_iters=1000):
+    n = 8
+    state = [random.randint(0, n-1) for _ in range(n)]
+    yield state
+    it = 0
+    while it < max_iters:
+        it += 1
+        h_now = heuristic(state)
+        if h_now == 0:
+            return
+        best_state = None
+        best_h = h_now
+        for row in range(n):
+            orig = state[row]
+            for col in range(n):
+                if col == orig: continue
+                ns = state.copy(); ns[row] = col
+                h_ns = heuristic(ns)
+                if h_ns < best_h:
+                    best_h = h_ns; best_state = ns
+        if best_state is None:
+            return
+        state = best_state
+        yield state
 
-# --- GUI ---
+def beam_steps(beam_width=4):
+    n = 8
+    beam = [[]]
+    yield []
+    for depth in range(n):
+        candidates = []
+        for st in beam:
+            row = len(st)
+            for col in range(n):
+                new_state = st + [col]
+                candidates.append((heuristic(new_state), new_state))
+        if not candidates:
+            return
+        candidates.sort(key=lambda x: x[0])
+        beam = [s for _, s in candidates[:beam_width]]
+        for b in beam:
+            yield b
+        for b in beam:
+            if len(b) == n and heuristic(b) == 0:
+                yield b
+                return
+    return
+
+def genetic_steps(pop_size=60, max_gens=200, crossover_rate=0.8, mutation_rate=0.15):
+    n = 8
+    max_pairs = n*(n-1)//2
+    def fitness(state): return max_pairs - heuristic(state)
+    population = [[random.randint(0, n-1) for _ in range(n)] for _ in range(pop_size)]
+    for gen in range(1, max_gens+1):
+        pop_with_fit = [(fitness(ind), ind) for ind in population]
+        pop_with_fit.sort(key=lambda x: -x[0])
+        best_fit, best_ind = pop_with_fit[0]
+        yield best_ind
+        if heuristic(best_ind) == 0:
+            return
+        # tournament selection + crossover + mutation
+        new_pop = []
+        while len(new_pop) < pop_size:
+            # tournament 3
+            parents = [random.choice(population) for _ in range(3)]
+            parents.sort(key=lambda p: fitness(p), reverse=True)
+            parent1 = parents[0]
+            parents = [random.choice(population) for _ in range(3)]
+            parents.sort(key=lambda p: fitness(p), reverse=True)
+            parent2 = parents[0]
+            child1, child2 = parent1.copy(), parent2.copy()
+            if random.random() < crossover_rate:
+                cp = random.randint(1, n-2)
+                child1 = parent1[:cp] + parent2[cp:]
+                child2 = parent2[:cp] + parent1[cp:]
+            def mutate(ind):
+                if random.random() < mutation_rate:
+                    if random.random() < 0.5:
+                        i, j = random.sample(range(n), 2)
+                        ind[i], ind[j] = ind[j], ind[i]
+                    else:
+                        i = random.randrange(n)
+                        ind[i] = random.randrange(n)
+                return ind
+            child1 = mutate(child1); child2 = mutate(child2)
+            new_pop.append(child1)
+            if len(new_pop) < pop_size:
+                new_pop.append(child2)
+        population = new_pop
+    # final
+    pop_with_fit = [(fitness(ind), ind) for ind in population]
+    pop_with_fit.sort(key=lambda x: -x[0])
+    yield pop_with_fit[0][1]
+    return
+
+def sa_steps(T0=10.0, alpha=0.95, max_iters=5000):
+    n = 8
+    state = [random.randint(0, n-1) for _ in range(n)]
+    yield state
+    T = T0
+    it = 0
+    while it < max_iters and T > 1e-6:
+        it += 1
+        row = random.randrange(n)
+        col = random.randrange(n)
+        while col == state[row]:
+            col = random.randrange(n)
+        new_state = state.copy(); new_state[row] = col
+        deltaE = heuristic(new_state) - heuristic(state)
+        accept = False
+        if deltaE <= 0:
+            accept = True
+        else:
+            if random.random() < math.exp(-deltaE / T):
+                accept = True
+        if accept:
+            state = new_state
+            yield state
+            if heuristic(state) == 0:
+                return
+        T *= alpha
+    return
+
+# ------------------ GUI ------------------
 root = tk.Tk()
-root.title("8 Queens - BFS/DFS/UCS/DLS/IDS")
-root.geometry("1200x700+100+30")
+root.title("8 Queens - Search Algorithms")
+root.geometry("1200x700+80+20")
 root.configure(bg="#BDE7E7")
 
-title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS)",
-                       font=("SegoeUI", 20, "bold"),
-                       fg="#0E2846", bg="#BDE7E7")
+title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS / Hill / Genetic / Beam / SA)",
+                       font=("SegoeUI", 18, "bold"), fg="#0E2846", bg="#BDE7E7")
 title_label.pack(pady=10)
 
 main_frame = tk.Frame(root, bg="#BDE7E7")
 main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
+# left empty visual board (for current state if desired)
 board = tk.Frame(main_frame, width=480, height=480)
 board.pack(side="left", padx=20)
 board.pack_propagate(False)
-
 for row in range(8):
     for col in range(8):
         color = "#47C0C0" if (row + col) % 2 == 0 else "#17375C"
         cell = tk.Frame(board, width=60, height=60, bg=color)
         cell.grid(row=row, column=col)
 
+# right placed frame that we draw into
 placedFrame = tk.Frame(main_frame, width=480, height=480)
 placedFrame.pack(side="right", padx=20)
 placedFrame.pack_propagate(False)
@@ -228,23 +335,76 @@ def draw_empty_board():
     return cells
 
 def draw_solution(cells, solution):
+    # clear
     for row in range(8):
         for col in range(8):
             for widget in cells[row][col].winfo_children():
                 widget.destroy()
+    # draw queens for rows in solution
     for row, col in enumerate(solution):
         lbl = tk.Label(cells[row][col], text="\u2655", fg="red",
                        bg=cells[row][col]["bg"], font=("Arial", 24, "bold"))
         lbl.pack(expand=True, fill="both")
 
-# --- Biến toàn cục ---
 cells_global = draw_empty_board()
-search_generator = None
-delay = 100
+
+# control vars
 algo_choice = tk.StringVar(value="BFS")
-skip_delay = False
+dls_limit_var = tk.StringVar(value="8")
+sa_T_var = tk.StringVar(value="10.0")
+sa_alpha_var = tk.StringVar(value="0.95")
+beam_width_var = tk.StringVar(value="4")
+
+# control frame (radios)
+control_label = tk.Frame(root, bg="#BDE7E7")
+control_label.pack(pady=5)
+
+algorithms = ["BFS", "DFS", "UCS", "DLS", "IDS", 
+              "Greedy", "A*", "Hill", "Genetic", "Beam", "SA"]
+
+for name in algorithms:
+    tk.Radiobutton(control_label, text=name, variable=algo_choice,
+                   value=name, bg="#BDE7E7", command=lambda: update_params()).pack(side="left", padx=6)
+
+# parameter area (DLS/IDS depth, SA params, Beam width)
+param_frame = tk.Frame(root, bg="#BDE7E7")
+param_frame.pack(pady=3)
+
+frame_dls = tk.Frame(param_frame, bg="#BDE7E7")
+tk.Label(frame_dls, text="DLS/IDS max depth:", bg="#BDE7E7").pack(side="left")
+tk.Entry(frame_dls, textvariable=dls_limit_var, width=4).pack(side="left", padx=5)
+
+frame_sa = tk.Frame(param_frame, bg="#BDE7E7")
+tk.Label(frame_sa, text="T0:", bg="#BDE7E7").pack(side="left")
+tk.Entry(frame_sa, textvariable=sa_T_var, width=6).pack(side="left", padx=5)
+tk.Label(frame_sa, text="Alpha:", bg="#BDE7E7").pack(side="left")
+tk.Entry(frame_sa, textvariable=sa_alpha_var, width=6).pack(side="left", padx=5)
+
+frame_beam = tk.Frame(param_frame, bg="#BDE7E7")
+tk.Label(frame_beam, text="Beam Width:", bg="#BDE7E7").pack(side="left")
+tk.Entry(frame_beam, textvariable=beam_width_var, width=4).pack(side="left", padx=5)
+
+def update_params():
+    # hide all frames, then show the one needed
+    frame_dls.pack_forget()
+    frame_sa.pack_forget()
+    frame_beam.pack_forget()
+    choice = algo_choice.get()
+    if choice in ("DLS", "IDS"):
+        frame_dls.pack()
+    elif choice == "SA":
+        frame_sa.pack()
+    elif choice == "Beam":
+        frame_beam.pack()
+
+update_params()  # initial hide/show
+
+# traversal history & runtime control
+search_generator = None
 running = False
-traversal_history = []  # Lưu toàn bộ quá trình duyệt
+skip_delay = False
+delay = 120
+traversal_history = []
 
 def run_step():
     global search_generator, cells_global, skip_delay, running, last_dls_result, traversal_history
@@ -255,15 +415,17 @@ def run_step():
             last_state = None
             for state in search_generator:
                 last_state = state
-                traversal_history.append(state)  # lưu lại bước
+                traversal_history.append(state)
             if last_state is not None:
                 cells_global = draw_empty_board()
                 draw_solution(cells_global, last_state)
             skip_delay = False
+            running = False
+            messagebox.showinfo("Kết thúc", "Đã skip tới cuối traversal.")
             return
         else:
             state = next(search_generator)
-            traversal_history.append(state)  # lưu lại bước
+            traversal_history.append(state)
             cells_global = draw_empty_board()
             draw_solution(cells_global, state)
             root.after(delay, run_step)
@@ -286,36 +448,57 @@ def run_step():
         running = False
 
 def start_search():
-    global search_generator, cells_global, running, last_dls_result, traversal_history
+    global search_generator, cells_global, running, last_dls_result, traversal_history, skip_delay
     cells_global = draw_empty_board()
     choice = algo_choice.get()
     last_dls_result = None
-    traversal_history = []  # reset lịch sử
-    if choice == "BFS":
-        search_generator = bfs_8queens_steps()
-    elif choice == "DFS":
-        search_generator = dfs_8queens_steps()
-    elif choice == "UCS":
-        search_generator = ucs_8queens_steps()
-    elif choice == "IDS":
-        try:
+    traversal_history = []
+    skip_delay = False
+
+    try:
+        if choice == "BFS":
+            search_generator = bfs_8queens_steps()
+        elif choice == "DFS":
+            search_generator = dfs_8queens_steps()
+        elif choice == "UCS":
+            search_generator = ucs_8queens_steps()
+        elif choice == "DLS":
             limit = int(dls_limit_var.get())
             if limit < 0: limit = 8
-        except Exception: limit = 8
-        search_generator = ids_8queens_steps(limit_max=limit)
-
-    elif choice == "Greedy":
-        search_generator = greedy_8queens_steps()
-    elif choice == "A*":
-        search_generator = astar_8queens_steps()
-
-    else:
-        try:
+            search_generator = dls_8queens_steps(limit=limit)
+        elif choice == "IDS":
             limit = int(dls_limit_var.get())
             if limit < 0: limit = 8
-        except Exception: limit = 8
-        search_generator = dls_8queens_steps(limit=limit)
-    
+            search_generator = ids_8queens_steps(limit_max=limit)
+        elif choice == "Hill":
+            search_generator = hill_climbing_steps()
+        elif choice == "Genetic":
+            search_generator = genetic_steps()
+        elif choice == "Beam":
+            try:
+                beam_width = int(beam_width_var.get())
+            except ValueError:
+                beam_width = 4
+            if beam_width <= 0:
+                beam_width = 4
+            search_generator = beam_steps(beam_width=beam_width)
+        elif choice == "SA":
+            try:
+                T0 = float(sa_T_var.get())
+                a = float(sa_alpha_var.get())
+            except:
+                T0, a = 10.0, 0.95
+            search_generator = sa_steps(T0=T0, alpha=a)
+        elif choice == "Greedy":
+            search_generator = greedy_8queens_steps()
+        elif choice == "A*":
+            search_generator = astar_8queens_steps()
+        else:
+            search_generator = dls_8queens_steps(limit=8)
+    except Exception as ex:
+        messagebox.showerror("Lỗi", f"Không thể khởi tạo thuật toán: {ex}")
+        return
+
     running = True
     run_step()
 
@@ -323,7 +506,6 @@ def skip_search():
     global skip_delay, running
     if not running: return
     skip_delay = True
-    run_step()
 
 def reset_board():
     global search_generator, running, skip_delay, last_dls_result, traversal_history
@@ -337,14 +519,12 @@ def reset_board():
 def quit_app():
     root.quit()
 
-# --- Xuất quá trình duyệt ---
 def export_traversal():
     if not traversal_history:
         messagebox.showwarning("Chưa có dữ liệu", "Chưa có bước duyệt nào để xuất.")
         return
-    
     output_dir = os.path.join(os.path.dirname(__file__), "output")
-    os.makedirs(output_dir, exist_ok=True)  # tạo nếu chưa có
+    os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "8queens_duongdi.txt")
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(f"====Thuật toán: {algo_choice.get()}====\n")
@@ -352,57 +532,36 @@ def export_traversal():
             f.write(f"=== Bước {idx} ===\n")
             board = [["." for _ in range(8)] for _ in range(8)]
             for r, c in enumerate(state):
-                board[r][c] = "♕"
+                if 0 <= r < 8 and 0 <= c < 8:
+                    board[r][c] = "♕"
             for row in board:
                 f.write(" ".join(row) + "\n")
             f.write("\n")
-    messagebox.showinfo("Xuất xong", "Đã lưu vào 8queens_duongdi.txt")
+    messagebox.showinfo("Xuất xong", f"Đã lưu vào {file_path}")
 
-# --- Control panel ---
-control_label = tk.Frame(root, bg="#BDE7E7")
-control_label.pack(pady=5)
-
-tk.Radiobutton(control_label, text="BFS", variable=algo_choice,
-               value="BFS", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="DFS", variable=algo_choice,
-               value="DFS", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="UCS", variable=algo_choice,
-               value="UCS", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="DLS", variable=algo_choice,
-               value="DLS", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="IDS", variable=algo_choice,
-               value="IDS", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="Greedy", variable=algo_choice,
-               value="Greedy", bg="#BDE7E7").pack(side="left", padx=5)
-tk.Radiobutton(control_label, text="A*", variable=algo_choice,
-               value="A*", bg="#BDE7E7").pack(side="left", padx=5)
-
-dls_limit_var = tk.StringVar(value="8")
-dls_limit_frame = tk.Frame(root, bg="#BDE7E7")
-dls_limit_frame.pack(pady=3)
-tk.Label(dls_limit_frame, text="DLS/IDS max depth:", bg="#BDE7E7").pack(side="left")
-tk.Entry(dls_limit_frame, textvariable=dls_limit_var, width=4).pack(side="left", padx=5)
-
+# --- Control panel (buttons) ---
 control_panel = tk.Frame(root, bg="#BDE7E7")
 control_panel.pack(pady=10)
-btn_start = tk.Button(control_panel, text="Start", font=("SegoeUI", 14, "bold"),
-                      width=10, command=start_search, bg ="#BDE7E7")
-btn_start.pack(side="left", padx=10)
 
-btn_skip = tk.Button(control_panel, text="Skip", font=("SegoeUI", 14, "bold"),
-                     width=10, command=skip_search, bg ="#BDE7E7")
-btn_skip.pack(side="left", padx=10)
+btn_start = tk.Button(control_panel, text="Start", font=("SegoeUI", 12, "bold"),
+                      width=12, command=start_search, bg ="#ffffff")
+btn_start.pack(side="left", padx=8)
 
-btn_reset = tk.Button(control_panel, text="Reset", font=("SegoeUI", 14, "bold"),
-                      width=10, command=reset_board, bg ="#BDE7E7")
-btn_reset.pack(side="left", padx=10)
+btn_skip = tk.Button(control_panel, text="Skip", font=("SegoeUI", 12, "bold"),
+                     width=12, command=skip_search, bg ="#ffffff")
+btn_skip.pack(side="left", padx=8)
 
-btn_export = tk.Button(control_panel, text="Export Traversal", font=("SegoeUI", 14, "bold"),
-                       width=15, command=export_traversal, bg ="#BDE7E7")
-btn_export.pack(side="left", padx=10)
+btn_reset = tk.Button(control_panel, text="Reset", font=("SegoeUI", 12, "bold"),
+                      width=12, command=reset_board, bg ="#ffffff")
+btn_reset.pack(side="left", padx=8)
 
-btn_quit = tk.Button(control_panel, text="Quit", font=("SegoeUI", 14, "bold"),
-                     width=10, command=quit_app, bg ="#BDE7E7")
-btn_quit.pack(side="left", padx=10)
+btn_export = tk.Button(control_panel, text="Export Traversal", font=("SegoeUI", 12, "bold"),
+                       width=15, command=export_traversal, bg ="#ffffff")
+btn_export.pack(side="left", padx=8)
 
+btn_quit = tk.Button(control_panel, text="Quit", font=("SegoeUI", 12, "bold"),
+                     width=10, command=quit_app, bg ="#ffffff")
+btn_quit.pack(side="left", padx=8)
+
+root.minsize(1000,700)
 root.mainloop()
