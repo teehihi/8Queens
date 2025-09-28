@@ -1,7 +1,7 @@
 import os
 import tkinter as tk
 from tkinter import messagebox
-from queue import Queue, PriorityQueue
+from queue import Queue, PriorityQueue, deque
 import random, math
 
 # ------------------ Utility ------------------
@@ -291,18 +291,142 @@ def sa_steps(T0=10.0, alpha=0.95, max_iters=5000):
         T *= alpha
     return
 
+# ------------------ And-Or Search (generator) ------------------
+def and_or_8queens_steps():
+    """
+    A simple And-Or recursive generator for n-queens where:
+    - OR node: choose a column for current row
+    - AND node: ensure that choice allows future rows to have solutions (we attempt them)
+    This will behave similar to backtracking but yields at OR expansions and when a solution found.
+    """
+    n = 8
+    def recurse(state):
+        row = len(state)
+        # yield the current partial assignment as an OR-node expansion
+        yield state
+        if row == n:
+            yield state  # full solution
+            return True
+        # OR: try each possible action (column)
+        for col in range(n):
+            if isSafe(state, row, col):
+                # yield the choice (OR child)
+                yield state + [col]
+                # AND: we must prove that all "outcomes" (here deterministic) lead to success
+                # For deterministic CSP, we simply recurse; if recursion finds a solution, return True
+                res = yield from recurse(state + [col])
+                if res:
+                    return True
+        return False
+    try:
+        yield from recurse([])
+    except GeneratorExit:
+        return
+
+# ------------------ Belief Search (domains + AC-3 like propagation) ------------------
+def belief_8queens_steps():
+    """
+    Represent belief as domains: list of sets for each row.
+    Start with all columns possible per row. Then repeatedly apply constraint propagation:
+    - if a row has singleton {c}, remove conflicting columns from other rows' domains (same col and diagonals).
+    We'll yield domains after each propagation step. If we reach all singletons that are consistent -> solution.
+    If some domain becomes empty -> failure (we'll still yield).
+    This is a simple belief-space narrowing approach.
+    """
+    n = 8
+    domains = [set(range(n)) for _ in range(n)]
+    yield [ds.copy() for ds in domains]  # initial belief
+    # We'll try a loop combining assignment (choose row with smallest >1 domain) and propagation
+    max_iters = 10000
+    it = 0
+    while it < max_iters:
+        it += 1
+        # AC-3 like: queue of arcs (i, j)
+        q = deque()
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    q.append((i, j))
+        changed = False
+        while q:
+            xi, xj = q.popleft()
+            if revise(domains, xi, xj):
+                changed = True
+                if len(domains[xi]) == 0:
+                    yield [ds.copy() for ds in domains]
+                    return
+                for xk in range(n):
+                    if xk != xi and xk != xj:
+                        q.append((xk, xi))
+        # yield the domains after propagation
+        yield [ds.copy() for ds in domains]
+        # check for solution
+        all_singleton = all(len(ds) == 1 for ds in domains)
+        if all_singleton:
+            # verify consistency
+            sol = [next(iter(ds)) for ds in domains]
+            if all(isSafe(sol[:r], r, sol[r]) for r in range(n)):
+                yield sol
+                return
+            else:
+                # inconsistent, continue with splitting
+                pass
+        # if not solved, choose a row with smallest domain >1 and branch (like search in belief space)
+        # we'll pick an element and split domain (simple branching)
+        row_to_branch = None
+        min_size = 999
+        for i, ds in enumerate(domains):
+            if 1 < len(ds) < min_size:
+                min_size = len(ds)
+                row_to_branch = i
+        if row_to_branch is None:
+            # either solved or stuck
+            return
+        # branch: pick one value to assign and continue (we'll do one branch per generator invocation)
+        # To keep generator behavior predictable, we'll assign the first candidate and propagate next loop
+        val = next(iter(domains[row_to_branch]))
+        # create new domains (simulate assignment)
+        domains[row_to_branch] = {val}
+        # yield the assignment state
+        yield [ds.copy() for ds in domains]
+        # loop back to propagate the newly assigned singleton
+    return
+
+def revise(domains, xi, xj):
+    """
+    Revise domain xi wrt xj. Remove values in domains[xi] that are incompatible with every value in domains[xj].
+    For n-queens: value a in xi is incompatible with b in xj if a==b or abs(a-b)==abs(i-j)
+    If we remove any value from domains[xi], return True.
+    """
+    removed = False
+    to_remove = set()
+    n = len(domains)
+    for a in domains[xi]:
+        # check existence of some b in domains[xj] that is compatible
+        ok_exist = False
+        for b in domains[xj]:
+            if a != b and abs(a - b) != abs(xi - xj):
+                ok_exist = True
+                break
+        if not ok_exist:
+            to_remove.add(a)
+    if to_remove:
+        domains[xi] -= to_remove
+        removed = True
+    return removed
+
 # ------------------ GUI ------------------
 root = tk.Tk()
 root.title("8 Queens - Search Algorithms")
-root.geometry("1200x700+80+20")
+root.geometry("1200x760+80+20")
 root.configure(bg="#BDE7E7")
 
-title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS / Hill / Genetic / Beam / SA)",
-                       font=("SegoeUI", 18, "bold"), fg="#0E2846", bg="#BDE7E7")
-title_label.pack(pady=10)
+title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS / Greedy / A* / Hill / Genetic / Beam / SA / And-Or / Belief)",
+                       font=("SegoeUI", 16, "bold"), fg="#0E2846", bg="#BDE7E7")
+title_label.pack(pady=8)
 
 main_frame = tk.Frame(root, bg="#BDE7E7")
-main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+main_frame.pack(fill="both", expand=True, padx=10, pady=6)
 
 # left empty visual board (for current state if desired)
 board = tk.Frame(main_frame, width=480, height=480)
@@ -327,7 +451,7 @@ def draw_empty_board():
         row_cells = []
         for col in range(8):
             color = "#47C0C0" if (row + col) % 2 == 0 else "#17375C"
-            cell = tk.Frame(placedFrame, width=60, height=60, bg=color)
+            cell = tk.Frame(placedFrame, width=60, height=60, bg=color, relief="raised", bd=1)
             cell.grid(row=row, column=col)
             cell.pack_propagate(False)
             row_cells.append(cell)
@@ -340,11 +464,33 @@ def draw_solution(cells, solution):
         for col in range(8):
             for widget in cells[row][col].winfo_children():
                 widget.destroy()
-    # draw queens for rows in solution
-    for row, col in enumerate(solution):
-        lbl = tk.Label(cells[row][col], text="\u2655", fg="red",
-                       bg=cells[row][col]["bg"], font=("Arial", 24, "bold"))
-        lbl.pack(expand=True, fill="both")
+    # If solution is a list of ints -> draw queens
+    if isinstance(solution, list) and solution and all(isinstance(x, int) for x in solution):
+        for row, col in enumerate(solution):
+            if 0 <= row < 8 and 0 <= col < 8:
+                lbl = tk.Label(cells[row][col], text="\u2655", fg="red",
+                               bg=cells[row][col]["bg"], font=("Arial", 24, "bold"))
+                lbl.pack(expand=True, fill="both")
+    # If solution is list of sets (belief domains) -> draw queens for singletons, else show number of possibilities
+    elif isinstance(solution, list) and solution and all(isinstance(x, set) for x in solution):
+        for row, ds in enumerate(solution):
+            if len(ds) == 1:
+                col = next(iter(ds))
+                lbl = tk.Label(cells[row][col], text="\u2655", fg="red",
+                               bg=cells[row][col]["bg"], font=("Arial", 22, "bold"))
+                lbl.pack(expand=True, fill="both")
+            else:
+                # show small label in each column indicating possible or empty
+                for col in range(8):
+                    if col in ds:
+                        sub = tk.Label(cells[row][col], text="·", fg="yellow", bg=cells[row][col]["bg"], font=("Arial", 14))
+                        sub.pack(expand=True, fill="both")
+                # also show count in leftmost cell
+                count_lbl = tk.Label(cells[row][0], text=str(len(ds)), fg="black", bg=cells[row][0]["bg"], font=("Arial", 10))
+                count_lbl.place(relx=0.02, rely=0.02)
+    else:
+        # unknown format -> no draw
+        pass
 
 cells_global = draw_empty_board()
 
@@ -357,14 +503,15 @@ beam_width_var = tk.StringVar(value="4")
 
 # control frame (radios)
 control_label = tk.Frame(root, bg="#BDE7E7")
-control_label.pack(pady=5)
+control_label.pack(pady=6)
 
-algorithms = ["BFS", "DFS", "UCS", "DLS", "IDS", 
-              "Greedy", "A*", "Hill", "Genetic", "Beam", "SA"]
+algorithms = ["BFS", "DFS", "UCS", "DLS", "IDS",
+              "Greedy", "A*", "Hill", "Genetic", "Beam", "SA",
+              "And-Or", "Belief"]
 
 for name in algorithms:
     tk.Radiobutton(control_label, text=name, variable=algo_choice,
-                   value=name, bg="#BDE7E7", command=lambda: update_params()).pack(side="left", padx=6)
+                   value=name, bg="#BDE7E7", command=lambda: update_params()).pack(side="left", padx=4)
 
 # parameter area (DLS/IDS depth, SA params, Beam width)
 param_frame = tk.Frame(root, bg="#BDE7E7")
@@ -493,6 +640,10 @@ def start_search():
             search_generator = greedy_8queens_steps()
         elif choice == "A*":
             search_generator = astar_8queens_steps()
+        elif choice == "And-Or":
+            search_generator = and_or_8queens_steps()
+        elif choice == "Belief":
+            search_generator = belief_8queens_steps()
         else:
             search_generator = dls_8queens_steps(limit=8)
     except Exception as ex:
@@ -530,12 +681,21 @@ def export_traversal():
         f.write(f"====Thuật toán: {algo_choice.get()}====\n")
         for idx, state in enumerate(traversal_history, 1):
             f.write(f"=== Bước {idx} ===\n")
-            board = [["." for _ in range(8)] for _ in range(8)]
-            for r, c in enumerate(state):
-                if 0 <= r < 8 and 0 <= c < 8:
-                    board[r][c] = "♕"
-            for row in board:
-                f.write(" ".join(row) + "\n")
+            # If state is list of ints
+            if isinstance(state, list) and state and all(isinstance(x, int) for x in state):
+                board = [["." for _ in range(8)] for _ in range(8)]
+                for r, c in enumerate(state):
+                    if 0 <= r < 8 and 0 <= c < 8:
+                        board[r][c] = "♕"
+                for row in board:
+                    f.write(" ".join(row) + "\n")
+            # If state is list of sets (belief)
+            elif isinstance(state, list) and state and all(isinstance(x, set) for x in state):
+                for r, ds in enumerate(state):
+                    line = f"Row {r}: " + ("{" + ",".join(str(x) for x in sorted(ds)) + "}" if ds else "{}")
+                    f.write(line + "\n")
+            else:
+                f.write(str(state) + "\n")
             f.write("\n")
     messagebox.showinfo("Xuất xong", f"Đã lưu vào {file_path}")
 
@@ -563,5 +723,5 @@ btn_quit = tk.Button(control_panel, text="Quit", font=("SegoeUI", 12, "bold"),
                      width=10, command=quit_app, bg ="#ffffff")
 btn_quit.pack(side="left", padx=8)
 
-root.minsize(1000,700)
+root.minsize(1000,740)
 root.mainloop()
