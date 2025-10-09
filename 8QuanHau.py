@@ -1,7 +1,8 @@
 import os
 import tkinter as tk
 from tkinter import messagebox
-from queue import Queue, PriorityQueue, deque
+from queue import Queue, PriorityQueue
+from collections import deque
 import random, math
 
 # ------------------ Utility ------------------
@@ -326,71 +327,61 @@ def and_or_8queens_steps():
 # ------------------ Belief Search (domains + AC-3 like propagation) ------------------
 def belief_8queens_steps():
     """
-    Represent belief as domains: list of sets for each row.
-    Start with all columns possible per row. Then repeatedly apply constraint propagation:
-    - if a row has singleton {c}, remove conflicting columns from other rows' domains (same col and diagonals).
-    We'll yield domains after each propagation step. If we reach all singletons that are consistent -> solution.
-    If some domain becomes empty -> failure (we'll still yield).
-    This is a simple belief-space narrowing approach.
+    Belief search: duy trì miền giá trị (domain) cho mỗi hàng.
+    Dùng propagation kiểu AC-3, sau đó rẽ nhánh với hàng có domain nhỏ nhất > 1.
+    Đảm bảo đặt đủ 8 hậu.
     """
     n = 8
     domains = [set(range(n)) for _ in range(n)]
-    yield [ds.copy() for ds in domains]  # initial belief
-    # We'll try a loop combining assignment (choose row with smallest >1 domain) and propagation
-    max_iters = 10000
-    it = 0
-    while it < max_iters:
-        it += 1
-        # AC-3 like: queue of arcs (i, j)
-        q = deque()
-        for i in range(n):
-            for j in range(n):
-                if i != j:
-                    q.append((i, j))
+    yield [ds.copy() for ds in domains]
+
+    def ac3(domains):
+        q = deque((i, j) for i in range(n) for j in range(n) if i != j)
         changed = False
         while q:
             xi, xj = q.popleft()
             if revise(domains, xi, xj):
                 changed = True
                 if len(domains[xi]) == 0:
-                    yield [ds.copy() for ds in domains]
-                    return
+                    return False
                 for xk in range(n):
                     if xk != xi and xk != xj:
                         q.append((xk, xi))
-        # yield the domains after propagation
+        return True
+
+    def search(domains):
+        # yield trạng thái hiện tại
         yield [ds.copy() for ds in domains]
-        # check for solution
-        all_singleton = all(len(ds) == 1 for ds in domains)
-        if all_singleton:
-            # verify consistency
+
+        # propagation
+        ok = ac3(domains)
+        yield [ds.copy() for ds in domains]
+        if not ok:
+            return False
+
+        # check full assignment
+        all_single = all(len(ds) == 1 for ds in domains)
+        if all_single:
             sol = [next(iter(ds)) for ds in domains]
             if all(isSafe(sol[:r], r, sol[r]) for r in range(n)):
                 yield sol
-                return
+                return True
             else:
-                # inconsistent, continue with splitting
-                pass
-        # if not solved, choose a row with smallest domain >1 and branch (like search in belief space)
-        # we'll pick an element and split domain (simple branching)
-        row_to_branch = None
-        min_size = 999
-        for i, ds in enumerate(domains):
-            if 1 < len(ds) < min_size:
-                min_size = len(ds)
-                row_to_branch = i
-        if row_to_branch is None:
-            # either solved or stuck
-            return
-        # branch: pick one value to assign and continue (we'll do one branch per generator invocation)
-        # To keep generator behavior predictable, we'll assign the first candidate and propagate next loop
-        val = next(iter(domains[row_to_branch]))
-        # create new domains (simulate assignment)
-        domains[row_to_branch] = {val}
-        # yield the assignment state
-        yield [ds.copy() for ds in domains]
-        # loop back to propagate the newly assigned singleton
-    return
+                return False
+
+        # chọn hàng có domain nhỏ nhất > 1 để branch
+        row = min((i for i in range(n) if len(domains[i]) > 1),
+                  key=lambda i: len(domains[i]))
+        for val in sorted(domains[row]):
+            new_domains = [ds.copy() for ds in domains]
+            new_domains[row] = {val}
+            yield [ds.copy() for ds in new_domains]
+            res = yield from search(new_domains)
+            if res:
+                return True
+        return False
+
+    yield from search(domains)
 
 def revise(domains, xi, xj):
     """
@@ -401,7 +392,7 @@ def revise(domains, xi, xj):
     removed = False
     to_remove = set()
     n = len(domains)
-    for a in domains[xi]:
+    for a in set(domains[xi]):
         # check existence of some b in domains[xj] that is compatible
         ok_exist = False
         for b in domains[xj]:
@@ -415,14 +406,179 @@ def revise(domains, xi, xj):
         removed = True
     return removed
 
+# ------------------ NEW: Partial / Backtracking / Forward Checking / AC3+Backtrack ------------------
+
+def partial_8queens_steps(pre_filled=None):
+    """
+    Tìm kiếm khi biết trước một phần kết quả (partial assignment).
+    pre_filled: list các vị trí đã biết, -1 nếu chưa xác định.
+    Nếu pre_filled is None => treat as all unknown.
+    """
+    n = 8
+    if pre_filled is None:
+        pre_filled = [-1] * n
+    # Validate length
+    if len(pre_filled) != n:
+        pre_filled = (pre_filled + [-1]*n)[:n]
+
+    def recurse(state, row):
+        yield state
+        if row == n:
+            yield state
+            return True
+        if pre_filled[row] != -1:
+            col = pre_filled[row]
+            # if pre-filled conflicts with earlier assignment -> fail this branch
+            if isSafe(state, row, col):
+                res = yield from recurse(state + [col], row + 1)
+                if res: return True
+            return False
+        for col in range(n):
+            if isSafe(state, row, col):
+                res = yield from recurse(state + [col], row + 1)
+                if res: return True
+        return False
+
+    yield from recurse([], 0)
+
+
+def backtracking_8queens_steps():
+    """
+    Backtracking full search as generator.
+    """
+    n = 8
+
+    def recurse(state, row):
+        yield state
+        if row == n:
+            yield state
+            return True
+        for col in range(n):
+            if isSafe(state, row, col):
+                res = yield from recurse(state + [col], row + 1)
+                if res: return True
+        return False
+
+    yield from recurse([], 0)
+
+
+def forward_checking_8queens_steps():
+    """
+    Forward checking: domains + assign left-to-right, prune forward domains.
+    Yields domain snapshots and final solution when found.
+    """
+    n = 8
+    domains = [set(range(n)) for _ in range(n)]
+
+    def recurse(state, row, domains):
+        yield [d.copy() for d in domains]
+        if row == n:
+            sol = [next(iter(d)) for d in domains]
+            yield sol
+            return True
+        for col in list(domains[row]):
+            if isSafe(state, row, col):
+                new_domains = [d.copy() for d in domains]
+                new_domains[row] = {col}
+                # forward checking: prune later rows
+                failure = False
+                for r in range(row + 1, n):
+                    if col in new_domains[r]:
+                        new_domains[r].remove(col)
+                    diff = r - row
+                    if (col - diff) in new_domains[r]:
+                        new_domains[r].remove(col - diff)
+                    if (col + diff) in new_domains[r]:
+                        new_domains[r].remove(col + diff)
+                    if len(new_domains[r]) == 0:
+                        failure = True
+                        break
+                if failure:
+                    continue
+                res = yield from recurse(state + [col], row + 1, new_domains)
+                if res: return True
+        return False
+
+    yield from recurse([], 0, domains)
+
+
+def ac3_8queens_steps():
+    """
+    AC-3 propagation then (if needed) backtracking over remaining domains.
+    Yields domain snapshots during propagation and yields final solution when found.
+    """
+    n = 8
+    domains = [set(range(n)) for _ in range(n)]
+    yield [ds.copy() for ds in domains]
+
+    # AC-3 propagation
+    queue = deque((i, j) for i in range(n) for j in range(n) if i != j)
+    while queue:
+        xi, xj = queue.popleft()
+        if revise(domains, xi, xj):
+            yield [ds.copy() for ds in domains]
+            if len(domains[xi]) == 0:
+                return
+            for xk in range(n):
+                if xk != xi and xk != xj:
+                    queue.append((xk, xi))
+
+    # If everything singleton and consistent -> solution
+    if all(len(d) == 1 for d in domains):
+        sol = [next(iter(ds)) for ds in domains]
+        if all(isSafe(sol[:r], r, sol[r]) for r in range(n)):
+            yield sol
+            return
+
+    # Otherwise do backtracking using current domains (MRV ordering could be added)
+    # We'll choose next unassigned row (left-to-right) but only try values in domain
+    def backtrack_from_domains(partial, domains_local):
+        row = len(partial)
+        # If partial is shorter than number of rows, we still must pick by row index
+        if row == n:
+            yield partial
+            return True
+        # If row already assigned in domains_local as singleton earlier than len(partial), handle
+        for val in list(domains_local[row]):
+            if isSafe(partial, row, val):
+                # create new domains copy and assign
+                new_domains = [d.copy() for d in domains_local]
+                new_domains[row] = {val}
+                # forward prune
+                fail = False
+                for r in range(row + 1, n):
+                    if val in new_domains[r]:
+                        new_domains[r].remove(val)
+                    diff = r - row
+                    if (val - diff) in new_domains[r]:
+                        new_domains[r].remove(val - diff)
+                    if (val + diff) in new_domains[r]:
+                        new_domains[r].remove(val + diff)
+                    if len(new_domains[r]) == 0:
+                        fail = True
+                        break
+                if fail:
+                    continue
+                # yield domains snapshot after assignment
+                yield [d.copy() for d in new_domains]
+                res = yield from backtrack_from_domains(partial + [val], new_domains)
+                if res:
+                    return True
+        return False
+
+    # Kick off backtracking starting with empty partial but using domains as pruned by AC3
+    yield from backtrack_from_domains([], domains)
+    return
+
+
 # ------------------ GUI ------------------
 root = tk.Tk()
 root.title("8 Queens - Search Algorithms")
 root.geometry("1200x760+80+20")
 root.configure(bg="#BDE7E7")
 
-title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS / Greedy / A* / Hill / Genetic / Beam / SA / And-Or / Belief)",
-                       font=("SegoeUI", 16, "bold"), fg="#0E2846", bg="#BDE7E7")
+title_label = tk.Label(root, text="8 QUEENS SEARCH (BFS / DFS / UCS / DLS / IDS / Greedy / A* / Hill / Genetic / Beam / SA / And-Or / Belief / Partial / Backtracking / Forward Checking / AC3)",
+                       font=("SegoeUI", 14, "bold"), fg="#0E2846", bg="#BDE7E7")
 title_label.pack(pady=8)
 
 main_frame = tk.Frame(root, bg="#BDE7E7")
@@ -507,10 +663,21 @@ control_label.pack(pady=6)
 
 algorithms = ["BFS", "DFS", "UCS", "DLS", "IDS",
               "Greedy", "A*", "Hill", "Genetic", "Beam", "SA",
-              "And-Or", "Belief"]
+              "And-Or", "Belief",
+              "Partial", "Backtracking", "Forward Checking", "AC3"]
 
-for name in algorithms:
-    tk.Radiobutton(control_label, text=name, variable=algo_choice,
+# 2 hàng nút
+half = len(algorithms) // 2
+row1 = tk.Frame(control_label, bg="#BDE7E7")
+row1.pack()
+for name in algorithms[:half]:
+    tk.Radiobutton(row1, text=name, variable=algo_choice,
+                   value=name, bg="#BDE7E7", command=lambda: update_params()).pack(side="left", padx=4)
+
+row2 = tk.Frame(control_label, bg="#BDE7E7")
+row2.pack()
+for name in algorithms[half:]:
+    tk.Radiobutton(row2, text=name, variable=algo_choice,
                    value=name, bg="#BDE7E7", command=lambda: update_params()).pack(side="left", padx=4)
 
 # parameter area (DLS/IDS depth, SA params, Beam width)
@@ -644,6 +811,16 @@ def start_search():
             search_generator = and_or_8queens_steps()
         elif choice == "Belief":
             search_generator = belief_8queens_steps()
+        elif choice == "Partial":
+            # mặc định không ép xung đột (tất cả -1)
+            pre = [-1] * 8
+            search_generator = partial_8queens_steps(pre_filled=pre)
+        elif choice == "Backtracking":
+            search_generator = backtracking_8queens_steps()
+        elif choice == "Forward Checking":
+            search_generator = forward_checking_8queens_steps()
+        elif choice == "AC3":
+            search_generator = ac3_8queens_steps()
         else:
             search_generator = dls_8queens_steps(limit=8)
     except Exception as ex:
