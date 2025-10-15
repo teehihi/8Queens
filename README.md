@@ -55,6 +55,12 @@ Chạy toàn bộ các cell trong notebook.
 Ví dụ nghiệm hợp lệ:
 
 [0, 4, 7, 5, 2, 6, 1, 3]
+---
+
+🎥 Demo BFS Visualization
+<p align="center"> <img src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2NpcW10emVtdDRtcmV6NTk0OHJza2NsaWZrcmE5ajR6dGRyZTdkMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/6NUMgZzaqOHjCrDcFP/giphy.gif" width="600" alt="BFS Demo Animation" /> </p>
+
+--- 
 
 ✨ Tác giả
 --- 
