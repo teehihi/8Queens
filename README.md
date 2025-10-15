@@ -72,7 +72,7 @@ Ví dụ nghiệm hợp lệ:
   </tr>
 </table>
 
----
+
 
 ### 🟩 Nhóm 2: Tìm kiếm có thông tin
 <table align="center">
@@ -89,7 +89,7 @@ Ví dụ nghiệm hợp lệ:
   </tr>
 </table>
 
----
+
 
 ### 🟨 Nhóm 3: Tìm kiếm cục bộ
 <table align="center">
@@ -109,7 +109,7 @@ Ví dụ nghiệm hợp lệ:
   </tr>
 </table>
 🚩 Nhiều thuật toán, kéo qua phải để xem tiếp 🤓
----
+
 
 ### 🟪 Nhóm 4: Tìm kiếm môi trường phức tạp
 <table align="center">
@@ -126,7 +126,7 @@ Ví dụ nghiệm hợp lệ:
   </tr>
 </table>
 
----
+
 
 ### 🟧 Nhóm 5: Tìm kiếm môi trường ràng buộc
 <table align="center">
