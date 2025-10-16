@@ -61,7 +61,7 @@ nhưng có thể tốn nhiều thời gian và bộ nhớ.*
 - **DLS (Depth-Limited Search)** – Phiên bản DFS có giới hạn độ sâu.  
 - **IDS (Iterative Deepening Search)** – Kết hợp ưu điểm của BFS và DFS.  
 
----
+
 
 #### 🔹 Tìm kiếm có thông tin – *Informed Search*
 > 🧠 *Các thuật toán này sử dụng thông tin heuristic để hướng dẫn quá trình tìm kiếm,  
@@ -70,7 +70,7 @@ giúp rút ngắn thời gian tìm lời giải so với tìm kiếm mù.*
 - **Greedy Search** – Tìm kiếm tham lam, luôn chọn hướng đi có vẻ tốt nhất tại thời điểm hiện tại.  
 - **A\*** – Kết hợp chi phí thực tế *(g)* và chi phí ước lượng *(h)* để tối ưu hóa đường đi.  
 
----
+
 
 #### 🔹 Tìm kiếm cục bộ & Metaheuristic
 > 🔄 *Các thuật toán này tập trung cải thiện lời giải hiện tại thông qua việc đánh giá các trạng thái lân cận,  
@@ -81,7 +81,7 @@ thường được sử dụng cho các bài toán tối ưu hóa phức tạp.*
 - **Beam Search** – Giữ lại một số lượng trạng thái tốt nhất *(beam width)* ở mỗi bước.  
 - **Genetic Algorithm** – Mô phỏng tiến hóa tự nhiên *(lai ghép, đột biến)* để tìm lời giải.  
 
----
+
 
 #### 🔹 Thuật toán nâng cao trong môi trường phức tạp
 > 🧬 *Các thuật toán này hướng đến những bài toán có tính phân rã, xác suất hoặc chiến lược tìm kiếm mở rộng,  
@@ -91,7 +91,7 @@ mang tính nghiên cứu và khám phá trong lĩnh vực Trí tuệ Nhân tạo
 - **Belief Space Search** – Dựa trên mô hình xác suất, tương tự các thuật toán *Estimation of Distribution (EDA)*.  
 - **Partial Search** – Giải bài toán theo nhóm quân hậu thay vì từng quân một.  
 
----
+
 
 #### 🔹 Giải bài toán ràng buộc – *Constraint Satisfaction Problems (CSP)*
 > 🧩 *Nhóm thuật toán này tập trung vào việc gán giá trị cho biến sao cho thỏa mãn các ràng buộc,  
