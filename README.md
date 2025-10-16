@@ -21,7 +21,95 @@ Dự án này bao gồm:
 ```
 
 ---
+## 👑 Trực Quan Hóa Giải Thuật — Bài Toán 8 Quân Hậu
 
+Dự án là một ứng dụng desktop được xây dựng bằng Python và Tkinter, giúp trực quan hóa quá trình giải bài toán 8 Quân Hậu thông qua nhiều thuật toán Trí tuệ Nhân tạo (AI) khác nhau.
+Mục tiêu là mang đến một công cụ học tập sinh động, giúp người dùng dễ dàng quan sát, so sánh và hiểu sâu cách hoạt động của từng thuật toán.
+
+
+### ✨ Tính Năng Nổi Bật
+
+🎨 Giao diện trực quan: Thiết kế bằng Tkinter, thân thiện và dễ sử dụng.
+
+🧩 Minh họa từng bước: Hiển thị rõ ràng quá trình tìm kiếm, từ trạng thái ban đầu đến khi tìm được lời giải.
+
+🧠 Đa dạng thuật toán: Hơn 15 thuật toán AI kinh điển, thuộc nhiều nhóm khác nhau — từ tìm kiếm mù, có thông tin đến tối ưu hóa cục bộ và CSP.
+
+
+### 🎮 Điều khiển linh hoạt:
+
+Xem cách thuật toán duyệt (Step-by-step)
+
+Bỏ qua đến kết quả (Skip)
+
+Xuất đường đi (Export Traversal)
+
+
+⚙️ Tùy chỉnh tốc độ: Người dùng có thể thay đổi tốc độ mô phỏng trong file cấu hình.
+
+
+### 🚀 Các Thuật Toán Được Cài Đặt
+
+🔹 Tìm kiếm mù - không có thông tin (Uninformed Search)
+
+BFS (Breadth-First Search) – Tìm lời giải ở độ sâu nhỏ nhất.
+
+DFS (Depth-First Search) – Đi sâu theo từng nhánh.
+
+UCS (Uniform Cost Search) – Mở rộng nút có chi phí thấp nhất.
+
+DLS (Depth-Limited Search) – DFS có giới hạn độ sâu.
+
+IDS (Iterative Deepening Search) – Kết hợp ưu điểm của BFS và DFS.
+
+
+🔹 Tìm kiếm có thông tin (Informed Search)
+
+Greedy Search – Tìm kiếm tham lam dựa trên heuristic.
+
+A* – Kết hợp chi phí thực tế (g) và ước lượng (h) để tối ưu hóa đường đi.
+
+
+🔹 Tìm kiếm cục bộ & Metaheuristic
+
+Hill Climbing – Leo đồi, tìm trạng thái tốt hơn trong vùng lân cận.
+
+Simulated Annealing – Cho phép chọn trạng thái xấu hơn để tránh kẹt tối ưu cục bộ.
+
+Beam Search – Giữ lại một số trạng thái tốt nhất trong mỗi bước.
+
+Genetic Algorithm – Mô phỏng tiến hóa tự nhiên (lai ghép, đột biến) để tìm lời giải.
+
+
+🔹 Thuật toán nâng cao trong môi trường phức tạp
+
+And-Or Search – Giải các bài toán có thể tách thành nhiều bài toán con.
+
+Belief Space Search – Dựa trên mô hình xác suất, tương tự EDA.
+
+Partial Search – Tiếp cận linh hoạt, giải theo nhóm quân hậu thay vì từng quân một.
+
+
+🔹 Giải bài toán ràng buộc (CSP)
+
+Backtracking – Thử và sai có hệ thống.
+
+Forward Checking – Kiểm tra và loại bỏ giá trị không hợp lệ sau mỗi bước gán.
+
+AC-3 (Arc Consistency Algorithm #3) – Tiền xử lý đảm bảo tính nhất quán giữa các biến.
+
+
+### 🎯 Mục Tiêu Dự Án
+
+Cung cấp một nền tảng trực quan hóa học thuật giúp sinh viên và người yêu thích AI có thể:
+
+ - Quan sát chi tiết quá trình tìm kiếm lời giải.
+
+ - So sánh hiệu suất giữa các thuật toán.
+
+ - Hiểu sâu hơn về bản chất của từng hướng tiếp cận trong AI.
+ 
+---
 ## 🚀 Cách chạy
 ### 1️⃣ Clone repo
 ```bash
